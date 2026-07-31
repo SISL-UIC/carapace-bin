@@ -1,155 +1,105 @@
 name: Go
-
-on:
-  pull_request:
-  push:
-
 jobs:
-
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container: ghcr.io/carapace-sh/go:1.26.3
     steps:
-      - name: shallow clone
-        uses: actions/checkout@v7
-        if: "!startsWith(github.ref, 'refs/tags/')"
-
-      - name: deep clone
-        uses: actions/checkout@v7
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          fetch-depth: 0
-
-      - name: fix git safe.directory
-        run:  git config --global --add safe.directory '*'
-
-      - name: Generate
-        run: go generate ./cmd/...
-
-      - name: Build
-        run: ls cmd/ | xargs -I'{}' sh -c "cd ./cmd/{} && go install -v -tags force_all ."
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: carapace
-          path: /go/bin/carapace 
-          retention-days: 1
-
-      - name: Test
-        run: go test -v ./cmd/...
-
-      - name: "Check formatting"
-        run: '[ "$(gofmt -d -s . | tee -a /dev/stderr)" = "" ]'
-
-      - name: "staticcheck"
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest && staticcheck ./...
-
-      - name: "carapace-lint"
-        run: go run ./cmd/carapace-lint completers/*/*/cmd/*.go
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AUR_KEY: ${{ secrets.AUR_KEY }}
-          FURY_TOKEN: ${{ secrets.FURY_TOKEN }}
-          GORELEASER_GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
-
-  build-windows:
-    runs-on: windows-latest
-    if: github.ref == 'refs/heads/master'
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.26.3'
-
-      - name: Generate
-        run: go generate ./cmd/...
-
-      - name: Build
-        run: go install -v -tags release,force_all ./cmd/...
-
-      - name: Test
-        run: go test -v ./cmd/...
-
-  build-macos:
-    runs-on: macos-latest
-    if: github.ref == 'refs/heads/master'
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.26.3'
-
-      - name: Generate
-        run: go generate ./cmd/...
-
-      - name: Build
-        run: go install -v -tags release,force_all ./cmd/...
-
-      - name: Test
-        run: go test -v ./cmd/...
-
+    - name: shallow clone
+      uses: actions/checkout@v7
+      if: '!startsWith(github.ref, ''refs/tags/'')'
+    - name: deep clone
+      uses: actions/checkout@v7
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        fetch-depth: 0
+    - name: fix git safe.directory
+      run: git config --global --add safe.directory '*'
+    - name: Generate
+      run: go generate ./cmd/...
+    - name: Build
+      run: ls cmd/ | xargs -I'{}' sh -c "cd ./cmd/{} && go install -v -tags force_all
+        ."
+    - uses: actions/upload-artifact@v7
+      with:
+        name: carapace
+        path: /go/bin/carapace
+        retention-days: 1
+    - name: Test
+      run: go test -v ./cmd/...
+    - name: Check formatting
+      run: '[ "$(gofmt -d -s . | tee -a /dev/stderr)" = "" ]'
+    - name: staticcheck
+      run: go install honnef.co/go/tools/cmd/staticcheck@latest && staticcheck ./...
+    - name: carapace-lint
+      run: go run ./cmd/carapace-lint completers/*/*/cmd/*.go
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v7
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        version: latest
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        AUR_KEY: ${{ secrets.AUR_KEY }}
+        FURY_TOKEN: ${{ secrets.FURY_TOKEN }}
+        GORELEASER_GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
+    timeout-minutes: 6
   doc:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container: ghcr.io/carapace-sh/mdbook
     needs: build
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: carapace
-          path: /usr/local/bin
-
-      - name: Cache linkcheck
-        uses: actions/cache@v6
-        with:
-          key: linkcheck
-          path: ./docs/book/linkcheck/cache.json
-
-      - name: "build docs"
-        run: |
-            chmod +x /usr/local/bin/carapace
-            sed -i 's/^follow-web-links.*/follow-web-links = false/' docs/book.toml
-            sh .github/completers.sh > docs/src/completers.md
-            sh .github/conditions.sh > docs/src/variable/conditions.md
-            sh .github/macros.sh > docs/src/spec/macros.md
-            mdbook build docs
-            sh .github/badge.sh > docs/book/html/badge.svg
-            sh .github/macros-badge.sh > docs/book/html/macros-badge.svg
-            sh docs/postprocessor/opengraph.sh
-
-      - name: "push gh-pages"
-        if: github.ref == 'refs/heads/master'
-        run: |
-            cd docs/book/html/
-            git init
-            git config user.name rsteube
-            git config user.email rsteube@users.noreply.github.com
-            git add .
-            git commit -m "initial commit [ci skip]"
-            git push --force https://rsteube:${GITHUB_TOKEN}@github.com/carapace-sh/carapace-bin.git master:gh-pages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
+    - uses: actions/checkout@v7
+    - uses: actions/download-artifact@v8
+      with:
+        name: carapace
+        path: /usr/local/bin
+    - name: Cache linkcheck
+      uses: actions/cache@v6
+      with:
+        key: linkcheck
+        path: ./docs/book/linkcheck/cache.json
+    - name: build docs
+      run: |
+        chmod +x /usr/local/bin/carapace
+        sed -i 's/^follow-web-links.*/follow-web-links = false/' docs/book.toml
+        sh .github/completers.sh > docs/src/completers.md
+        sh .github/conditions.sh > docs/src/variable/conditions.md
+        sh .github/macros.sh > docs/src/spec/macros.md
+        mdbook build docs
+        sh .github/badge.sh > docs/book/html/badge.svg
+        sh .github/macros-badge.sh > docs/book/html/macros-badge.svg
+        sh docs/postprocessor/opengraph.sh
+    - name: push gh-pages
+      if: github.ref == 'refs/heads/master'
+      run: |
+        cd docs/book/html/
+        git init
+        git config user.name rsteube
+        git config user.email rsteube@users.noreply.github.com
+        git add .
+        git commit -m "initial commit [ci skip]"
+        git push --force https://rsteube:${GITHUB_TOKEN}@github.com/carapace-sh/carapace-bin.git master:gh-pages
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 6
+    if: ${{ !cancelled() }}
   winget:
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/')) }}
+    runs-on: self-hosted
     needs: build
     steps:
-      - uses: vedantmgoyal2009/winget-releaser@v2
-        with:
-          identifier: rsteube.Carapace
-          max-versions-to-keep: 5 
-          installers-regex: '_windows_amd64\.zip$'
-          fork-user: rsteube-bot
-          token: ${{ secrets.WINGET_TOKEN }}
+    - uses: vedantmgoyal2009/winget-releaser@v2
+      with:
+        identifier: rsteube.Carapace
+        max-versions-to-keep: 5
+        installers-regex: _windows_amd64\.zip$
+        fork-user: rsteube-bot
+        token: ${{ secrets.WINGET_TOKEN }}
+    timeout-minutes: 6
+env:
+  PYTHONPATH: /tmp/instr
+  BASH_ENV: /tmp/instr/bash_env.sh
+'on':
+  pull_request: null
+  push: null
